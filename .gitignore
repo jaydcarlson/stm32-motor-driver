@@ -1,2 +1,5 @@
 Debug/
 .settings
+*.zip
+*.SchDocPreview
+pcb/Project Logs for stm32-motor-driver/
