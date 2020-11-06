@@ -17,6 +17,15 @@ g -500
 GO -500...Reached
 ```
 
+## Building the Firmware
+You should fork the repo on GitHub to provide you with a version-controlled environment to develop and backup your code. GitHub offers the [GitHub Desktop](https://desktop.github.com/) client, but there are many ways — including the command-line `git` tool — to manage local and remote git repositories.
+
+You'll need STM32CubeIDE installed to build the firmware. Invoke the **File > Import**  command to open the Import dialog. 
+
+Choose **General > Existing Projects into Workspace** and hit **Next**.
+
+Choose the **Select root directory** radio button and hit **Browse** to select the firmware folder. STM32CubeIDE should automatically discover the project and allow you to import it by selecting it with a checkbox and clicking **Finish**.
+
 ## Pin Mapping
 * PA10 and PA8 are wired as separate PWM channels (TIM1_CH3 and TIM1_CH1) for the INA and INB signals, respectively.
 * PA9 is routed to the "PWM" pin — if you want to recirculate your current, keep this pin high and instead apply your PWM to the INA or INB signals. Otherwise, enable TIM1_CH2 and apply your PWM duty cycle appropriately.

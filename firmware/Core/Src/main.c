@@ -78,12 +78,18 @@ float integralLimit = 1000;
 float integralFallOff = 10;
 int isMoving = 0;
 
+/**
+ * This PI controller runs at a fixed rate controlled by Timer 3's ISR. See stm32f1xx_it.c's TIM3_IRQHandler() function for the call into this function.
+ */
 void motorTask() {
+	// since we're using TIM2's hardware encoder mode, we can retrieve the current encoder value by simply reading the timer's counter
 	currentPosition = (int16_t)TIM2->CNT;
+
 	error = setpoint - currentPosition;
 
 	if(abs(error) < 5)
 	{
+		// kind of a hacky toggle state machine to print "Reached" once we get *close* to the setpoint, and to do so only once.
 		if(isMoving)
 			HAL_UART_Transmit(&huart1, "Reached\r\n", sizeof("Reached\r\n"), 100);
 
@@ -93,23 +99,28 @@ void motorTask() {
 
 	int forward = error > 0;
 	integral += error;
-	integral = fmaxf(fminf(integral, integralLimit), -integralLimit);
+	integral = fmaxf(fminf(integral, integralLimit), -integralLimit); // hack so that our integral doesn't blow up
 
+	// more hacks
 	if(integral > 0)
 		integral -= integralFallOff;
 	if(integral < 0)
 		integral += integralFallOff;
 
+	// this is our actual PI controller update function
 	float output = (kp * abs(error)) + (ki * integral);
 
+	// clip to a 16-bit value (our PWM timer's register size)
 	int dutyCycle = fminf(output, 0xFFFF);
+
+	// depending on direction, we'll either PWM the INA or INB pin
 	if(!forward)
 	{
-		TIM1->CCR3 = dutyCycle;
-		TIM1->CCR1 = 0;
+		TIM1->CCR1 = 0;			// INB = LOW
+		TIM1->CCR3 = dutyCycle;	// INA = PWM
 	} else {
-		TIM1->CCR3 = 0;
-		TIM1->CCR1 = dutyCycle;
+		TIM1->CCR1 = dutyCycle; // INB = PWM
+		TIM1->CCR3 = 0;			// INA = LOW
 	}
 }
 
@@ -127,12 +138,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	char rxChar = line[column-1];
 
+	// echo the character back to the user so they can see what they typed
 	HAL_UART_Transmit(&huart1, &rxChar, 1, 100);
 
 	if(rxChar == '\r' || rxChar == '\n' || column >= 255)
 	{
 		// we found a carriage return or we're out of bytes. Go ahead and process the line
-		switch(line[0])
+		switch(line[0]) // for simplicity, limit commands to a single letter
 		{
 		case 'g':
 			// got a setpoint command
@@ -145,13 +157,17 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 			sprintf(output, "\r\nGO %d...", setpoint);
 			HAL_UART_Transmit(&huart1, output, sizeof(output), 100);
 			break;
+
+		// add more commands here
+		// case 's': // print the status
+		// ...
+
 		}
 
-		column = 0;
+		column = 0; // reset the line buffer
 	}
 
-
-	HAL_UART_Receive_IT(&huart1, &line[column++], 1); // arm the interrupt for the next byte
+	HAL_UART_Receive_IT(&huart1, &line[column++], 1); // request another byte
 }
 
 
