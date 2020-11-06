@@ -60,6 +60,12 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define INB_Pin GPIO_PIN_8
+#define INB_GPIO_Port GPIOA
+#define PWM_Pin GPIO_PIN_9
+#define PWM_GPIO_Port GPIOA
+#define INA_Pin GPIO_PIN_10
+#define INA_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

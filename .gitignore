@@ -4,3 +4,4 @@ Debug/
 *.SchDocPreview
 pcb/Project Logs for stm32-motor-driver/
 pcb/Project Outputs for stm32-motor-driver/
+*.PrjPcbStructure

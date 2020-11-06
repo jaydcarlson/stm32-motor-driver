@@ -69,17 +69,28 @@ static void MX_ADC1_Init(void);
 /* USER CODE BEGIN 0 */
 
 int setpoint = 0;
-float kp = 100.0;
+float kp = 200.0;
 int16_t currentPosition;
 int error;
 float integral = 0;
 float ki = 1.0;
 float integralLimit = 1000;
 float integralFallOff = 10;
+int isMoving = 0;
 
 void motorTask() {
 	currentPosition = (int16_t)TIM2->CNT;
 	error = setpoint - currentPosition;
+
+	if(abs(error) < 5)
+	{
+		if(isMoving)
+			HAL_UART_Transmit(&huart1, "Reached\r\n", sizeof("Reached\r\n"), 100);
+
+		isMoving = 0;
+	}
+
+
 	int forward = error > 0;
 	integral += error;
 	integral = fmaxf(fminf(integral, integralLimit), -integralLimit);
@@ -92,15 +103,57 @@ void motorTask() {
 	float output = (kp * abs(error)) + (ki * integral);
 
 	int dutyCycle = fminf(output, 0xFFFF);
-	if(forward)
+	if(!forward)
 	{
-		TIM1->CCR1 = dutyCycle;
-		TIM1->CCR2 = 0;
-	} else {
+		TIM1->CCR3 = dutyCycle;
 		TIM1->CCR1 = 0;
-		TIM1->CCR2 = dutyCycle;
+	} else {
+		TIM1->CCR3 = 0;
+		TIM1->CCR1 = dutyCycle;
 	}
 }
+
+
+/****
+ * UART RX code
+ *
+ * This callback executes whenever a byte is received
+ */
+uint8_t line[255];
+uint8_t output[255];
+int column = 0;
+int newSetpoint;
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	char rxChar = line[column-1];
+
+	HAL_UART_Transmit(&huart1, &rxChar, 1, 100);
+
+	if(rxChar == '\r' || rxChar == '\n' || column >= 255)
+	{
+		// we found a carriage return or we're out of bytes. Go ahead and process the line
+		switch(line[0])
+		{
+		case 'g':
+			// got a setpoint command
+			newSetpoint = atoi(&line[2]);
+			if(newSetpoint != setpoint)
+			{
+				setpoint = newSetpoint;
+				isMoving = 1;
+			}
+			sprintf(output, "\r\nGO %d...", setpoint);
+			HAL_UART_Transmit(&huart1, output, sizeof(output), 100);
+			break;
+		}
+
+		column = 0;
+	}
+
+
+	HAL_UART_Receive_IT(&huart1, &line[column++], 1); // arm the interrupt for the next byte
+}
+
 
 /* USER CODE END 0 */
 
@@ -139,9 +192,13 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
   HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
   HAL_TIM_Base_Start_IT(&htim3);
+
+  HAL_UART_Receive_IT(&huart1, &line[column++], 1);
+  uint8_t data[] = "STM32 Motor Driver, v1.0\r\n";
+  HAL_UART_Transmit(&huart1, data, sizeof(data), 1000);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -300,10 +357,6 @@ static void MX_TIM1_Init(void)
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -469,11 +522,21 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(PWM_GPIO_Port, PWM_Pin, GPIO_PIN_SET);
+
   /*Configure GPIO pins : PB12 PB13 */
   GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PWM_Pin */
+  GPIO_InitStruct.Pin = PWM_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(PWM_GPIO_Port, &GPIO_InitStruct);
 
 }
 
